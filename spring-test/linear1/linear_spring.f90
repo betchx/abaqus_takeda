@@ -123,6 +123,102 @@ contains
     call xit
   end SUBROUTINE abort
 
+
+  subroutine updateStaticLP(AMATRX,RHS,ENERGY,SRESID,PROPS,U,DU)
+    implicit none
+    real, intent(out) :: AMATRX(12,12)
+    real, intent(out) :: RHS(12,*)
+    real, intent(out) :: ENERGY(8)
+    real, intent(out) :: SRESID(12)
+    real, intent(in)  :: PROPS(6)
+    real, intent(in)  :: U(12)
+    real, intent(in)  :: DU(12,*)
+
+    real, dimension(6) :: forces, dforces, dL, ddL
+
+    call updateKMat(AMATRX, PROPS)
+
+    dL = U(7:12) - U(1:6)
+    forces = PROPS*dL
+    ddL = DU(7:12,1) - DU(1:6,1)
+    dforces = PROPS*ddL
+    SRESID(1:6) = -dforces(:)
+    SRESID(7:12) = dforces(:)
+    RHS(:,1) = RHS(:,1)-SRESID
+    ENERGY(2) = half*sum(forces*ddL+dforces*dL+dforces*ddL)
+  end subroutine updateStaticLP
+
+  subroutine updateStatic(AMATRX,RHS,ENERGY,SRESID,PROPS,U)
+    implicit none
+    real, intent(out) :: AMATRX(12,12)
+    real, intent(out) :: RHS(12,*)
+    real, intent(out) :: ENERGY(8)
+    real, intent(out) :: SRESID(12)
+    real, intent(in)  :: PROPS(6)
+    real, intent(in)  :: U(12)
+
+    real, dimension(6) :: forces, dL
+
+    call updateKMat(AMATRX, PROPS)
+
+    dL = U(7:12) - U(1:6)
+    forces = PROPS * dL
+    SRESID(1:6) = -forces
+    SRESID(7:12) = forces
+    RHS(:,1) = RHS(:,1)-SRESID
+    !No distributed load can be considered
+    ENERGY(2) = half * sum(forces*dL)
+  end subroutine updateStatic
+
+
+  subroutine updateDynamic(AMATRX, RHS, ENERGY, SVARS, SRESID,&
+      PARAMS, PROPS, U, V, A, DTIME)
+    implicit none
+    real, intent(out) :: AMATRX(12,12)
+    real, intent(out) :: RHS(12,*)
+    real, intent(out) :: ENERGY(8)
+    real, intent(inout) :: SVARS(24)
+    real, intent(out) :: SRESID(12)
+    real, intent(in)  :: PARAMS(3)
+    real, intent(in)  :: PROPS(6)
+    real, intent(in)  :: U(12)
+    real, intent(in)  :: V(12)
+    real, intent(in)  :: A(12)
+    real, intent(in)  :: DTIME
+
+    real, dimension(6) :: forces, dL
+    real :: alpha, beta, gamma, dAdU, dVdU, val
+    integer i, k
+
+    alpha = PARAMS(1)
+    beta = PARAMS(2)
+    gamma = PARAMS(3)
+
+    dAdU = ONE/(BETA*DTIME**2)
+    dVdU = gamma / (beta*DTIME)
+
+    ! No operation about mass
+    do i=1,6
+      k= 1 + 6
+      val = (ONE+alpha)*PROPS(i)
+      AMATRX(i,i) = AMATRX(i,i) + val
+      AMATRX(k,k) = AMATRX(k,k) + val
+      AMATRX(i,k) = AMATRX(i,k) - val
+      AMATRX(k,i) = AMATRX(k,i) - val
+    end do
+
+    dL = U(7:12) - U(1:6)
+    forces = PROPS*dL
+    SRESID(1:6) = -forces
+    SRESID(7:12) = forces
+    RHS(:,1) = RHS(:,1)-((ONE+alpha)*SRESID-alpha*SVARS(1:12))
+    SVARS(13:24) = SVARS(1:12)
+    SVARS(1:12) = SRESID
+    ENERGY(1) = zero
+    ENERGY(2) = HALF*sum(forces*dL)
+  end subroutine updateDynamic
+
+
   subroutine updateKmat(AMATRX, PROPS)
     implicit none
     real :: AMATRX(12, 12)   !< 結果のマトリックス
