@@ -1,0 +1,28 @@
+*heading
+Single Truss model by Sample truss user element in user subroutine manual.
+*node
+1, 0, 0
+2, 1, 0
+*user element, nodes=2, type=u1, properties=4, coordinates=3, variables=12
+1,2,3
+*element, type=U1, elset=utruss
+1, 1, 2
+*nset, nset=lp
+2
+*nset, nset=fixP
+1
+*uel property, elset=utruss
+0.002, 2.1e11, 0.3, 720
+*boundary
+FIXP, 1, 6
+LP, 4,6
+*step
+*static
+0.1, 1.0
+*cload
+LP,  1, 1.0
+*node print, nset=LP
+U1
+*node print, nset=FixP
+RF1
+*end step
