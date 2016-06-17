@@ -52,8 +52,18 @@ o=obj
 FMODULE=linear_spring.$o
 FOBJS=
 
+run: exec.mak abaqus_v6.env
+	nmake -f exec.mak
 
-all:uels.lib
+exec.mak:mkmake.exe
+	dir /b *.inp | mkmake.exe int > exec.mak
+
+abaqus_v6.env: env_create.exe uels.lib
+	env_create.exe
+
+all:lib
+
+lib:uels.lib
 
 uels.lib:$(FOBJS) $(FMODULE)
 	LIB $(LIBFLAGS) /OUT:$@ $(FOBJS) $(FMODULE)
@@ -64,19 +74,10 @@ clean:
 .f90.$o:
 	$(FC) /c $(FFLAGS) $<
 
-run: exec.mak abaqus_v6.env
-	nmake -f exec.mak
-
-exec.mak:mkmake.exe
-	dir /b *.inp | findstr /v wheels.inp |  findstr /v  load.inp | mkmake.exe > exec.mak
-
-abaqus_v6.env: env_create.exe ejrs.lib
-	env_create.exe
-
 
 .f.$o:
 	$(FC) /c $(FFLAGS) $<
 
 
-.PHONY: all clean
+.PHONY: clean lib run
 
