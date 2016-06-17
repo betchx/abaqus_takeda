@@ -29,6 +29,12 @@
 !   23: Dummy (filler)
 !   24: Dummy (filler)
 
+! SVARS
+!   * used for intermediate residual
+!   1 to 12 SRESID at end
+!  13 to 24 SRESID at start
+
+
 module BilinerSpring
   implicit none
   real, parameter :: one=1.0d0, half=0.5d0, zero=0.0d0
