@@ -41,3 +41,26 @@
       return
       end
 
+      subroutine UEXTERNALDB(LOP,LRESTART,CTIME,DTIME,KSTEP,KINC)
+      implicit none
+C  Operation
+C  0: Start of the analysis
+C  1: start of the current analysis increment.
+C  2: end of the analysis increment
+C  3: end of the analysis
+C  4: beginning of the restart analysis
+      INTEGER LOP
+C  indicate restart condition
+C  0:not restart, 1:writing now, 2:write with overwrite
+      INTEGER LRESTART
+C  Time increment
+      REAL*8 DTIME
+C Number of step
+      INTEGER KSTEP
+C Number of increment
+      INTEGER KINC
+C  Current Time
+      REAL*8 CTIME(2)
+      call K_UEXTERNALDB(LOP,LRESTART,CTIME,DTIME,KSTEP,KINC)
+      end
+

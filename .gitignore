@@ -45,3 +45,4 @@
 #others
 abaqus_v6.env
 spring-test/linear1/exec.mak
+spring-test/linear1/check-debug.xml

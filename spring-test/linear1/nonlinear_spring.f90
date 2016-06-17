@@ -41,14 +41,17 @@ module BilinerSpring
 contains
 
   SUBROUTINE abort(msg)
+    use debug, only: terminate_debug
     implicit none
     character(*) msg
     write(*,*) msg
+    call terminate_debug()
     call xit
   end SUBROUTINE abort
 
 
   subroutine updateStaticLP(AMATRX,RHS,ENERGY,SRESID,PROPS,U,DU)
+    use debug
     implicit none
     real, intent(out) :: AMATRX(12,12)
     real, intent(out) :: RHS(12,*)
@@ -73,6 +76,7 @@ contains
   end subroutine updateStaticLP
 
   subroutine updateStatic(AMATRX,RHS,ENERGY,SVARS,SRESID,PROPS,U)
+    use debug
     implicit none
     real, intent(out) :: AMATRX(12,12)
     real, intent(out) :: RHS(12,*)
@@ -83,6 +87,8 @@ contains
     real, intent(in)  :: U(12)
 
     real, dimension(6) :: forces, kk, ee
+    character(1000):: tag
+    integer :: i
 
     ! Yield check
     call YieldCheck(forces, kk, ee, PROPS, U)
@@ -90,7 +96,21 @@ contains
 
     SRESID(1:6) = -forces
     SRESID(7:12) = forces
+
+!    tag = '<RHS1'
+!    do i = 1, 12
+!      tag = trim(tag) // attr('i'//to_s(i),RHS(i,1))
+!    enddo
+!    call trace(trim(tag) // '/>')
+
     RHS(:,1) = RHS(:,1)-SRESID
+
+!    tag = '<RHS2'
+!    do i = 1, 12
+!      tag = trim(tag) // attr('i'//to_s(i),RHS(i,1))
+!    enddo
+!    call trace(trim(tag) // '/>')
+
     !No distributed load can be considered
     ENERGY(2) = sum(ee)
   end subroutine updateStatic
@@ -144,6 +164,8 @@ contains
   end subroutine updateDynamic
 
   subroutine YieldCheck(F, KK, ee, PROPS, U)
+    use debug
+    implicit none
     real, intent(in)  :: PROPS(24)
     real, intent(in)  :: U(6,2)
     real, intent(out) :: F(6),KK(6),ee(6)
@@ -151,6 +173,9 @@ contains
     real :: dy  ! delta_y
     real :: u2, p2
     real, dimension(6) :: k1, yp, k2, dL
+
+!    call enter('YieldCheck')
+
     k1 = PROPS(1:6)
     yp = PROPS(9:14)
     k2 = PROPS(17:22)
@@ -160,16 +185,25 @@ contains
     F = K1 * dL
     do i=1, 6
       if (abs(F(i)).gt.yp(i)) then
-        dy = yp(i)/K1(i)
+        dy = sign(yp(i)/K1(i), F(i))
         u2 = dL(i) - dy
         p2 = k2(i)*u2
-        F(i) = sign(yp(i)+p2, F(i))
+        F(i) = sign(yp(i), F(i)) + p2
         KK(i) = k2(i)
-        ee(i) = half*(yp(i)*dy+p2*u2)+yp(i)*u2
+        ee(i) = half*(yp(i)*abs(dy)+p2*u2)+yp(i)*abs(u2)
+        if(i.eq.1) &
+          call trace('<DOF'//to_s(i)//attr('F',F(i))//attr('KK',kk(i))//attr('ee',ee(i))//&
+          attr('u1',u(i,2))//attr('u0',u(i,1))//attr('dL',dL(i))//&
+          attr('dy',dy)//attr('u2',u2)// attr('p2',p2)//'/>')
       else
         ee(i) = half * F(i) * dL(i)
+        if(i.eq.1) &
+          call trace('<DOF'//to_s(i)//attr('F',F(i))//attr('KK',kk(i))//attr('ee',ee(i))//&
+          attr('u1',u(i,2))//attr('u0',u(i,1))//attr('dL',dL(i))//&
+          '/>')
       end if
     end do
+!    call leave('YieldCheck')
   end subroutine YieldCheck
 
   subroutine checkAndUpdateKmat(AMATRX, PROPS,U)
@@ -309,6 +343,7 @@ subroutine K_BILINEAR_SPRING(&
     PREDEF, NPREDF, LFLAGS, MLVARX, DDLMAG, MDLOAD, PNEWDT, &
     JPROPS, NJPROP, PERIOD)
   use BilinerSpring
+  use debug
   implicit none
   ! need to update
   real, intent(out) :: RHS(MLVARX, NRHS)
@@ -363,6 +398,8 @@ subroutine K_BILINEAR_SPRING(&
   !!!
   !Local variables
   real, dimension(12) :: SRESID
+  character(1000) :: tag
+  integer :: i
 
   ! argument check
   if(JTYPE.ne.212) call abort('UEL bugs about user element type id')
@@ -370,6 +407,12 @@ subroutine K_BILINEAR_SPRING(&
   if(NDOFEL.ne.12) call abort('nodes of U202 must be three dimension')
   if(NDLOAD.gt.0) call abort('Distributed load on spring is not allowed')
   if(NPROPS.ne.24) call abort('U212 requires 24 float parameters')
+
+  !tag = '<RHS0'
+  !do i = 1, 12
+  !  tag = trim(tag) // attr('i'//to_s(i),RHS(i,1))
+  !enddo
+  !call trace(trim(tag) // '/>')
 
   ! clear
   AMATRX(:,:) = ZERO
@@ -383,35 +426,55 @@ subroutine K_BILINEAR_SPRING(&
     case (1:2)
       !Static
       if(LFLAGS(4).eq.1) then
+        call enter('updateStaticLP')
         call updateStaticLP(AMATRX,RHS,ENERGY,SRESID,PROPS,U,DU)
+        call leave('updateStaticLP')
       else
+        !call enter('updateStatic')
         call updateStatic(AMATRX,RHS,ENERGY,SVARS,SRESID,PROPS,U)
+        !call leave('updateStatic')
       endif
     case (11:12)
       !Implicit Dynamic
+      call enter('updateDynamic',KINC)
       call updateDynamic(AMATRX, RHS, ENERGY, SVARS, SRESID, &
         PARAMS, PROPS, U, V, A, DTIME)
+      call leave('updateDynamic',KINC)
     case default
       call abort('This Analysis type is not supported yet.')
     end select
   case(2)
+    call enter('checkAndUpdateKMat')
     call checkAndUpdateKMat(AMATRX,PROPS,U)
+    call leave('checkAndUpdateKMat')
   case(3)
     ! no dumping
+    call enter('updateDumping')
+    call leave('updateDumping')
   case(4)
     ! no mass
+    call enter('updateMMat')
     call updateMMat(AMATRX, PROPS)
+    call leave('updateMMat')
   case(5)
+    call enter('updateResidual')
     call updateResidual(RHS, SVARS, SRESID, PARAMS,PROPS, U)
+    call leave('updateResidual')
   case(6)
+    call enter('calcInitAcc')
     call calcInitAcc(AMATRX, RHS, SVARS, ENERGY, SRESID, PROPS,U)
+    call leave('calcInitAcc')
   case(100)
     !output
     select case(LFLAGS(1))
     case(1:2)
+      call enter('outputForStaticLP')
       call outputForStaticLP(RHS, ENERGY, SVARS, SRESID, PROPS, U, DU)
+      call leave('outputForStaticLP')
     case(41)
+      call enter('outputForFrequency')
       call outputForFrequency(RHS, SVARS, SRESID, PROPS, DU, NRHS)
+      call leave('outputForFrequency')
     end select
   end select
 

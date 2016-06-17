@@ -49,10 +49,14 @@ EXPORTS=/EXPORT:K_LINEAR_SPRING
 
 
 o=obj
-FMODULE=linear_spring.$o nonlinear_spring.$o
-FOBJS=
+FMODULE=debug.$o linear_spring.$o nonlinear_spring.$o
+FOBJS=extdb.$o
 
-run: exec.mak abaqus_v6.env
+run:check.dat
+	echo 1 | dat_extract check.dat
+
+
+check.dat: exec.mak abaqus_v6.env check.inp
 	nmake -f exec.mak
 
 exec.mak:mkmake.exe
@@ -78,6 +82,9 @@ clean:
 .f.$o:
 	$(FC) /c $(FFLAGS) $<
 
+
+nonlinear_spring.$o:debug.$o
+extdb.$o:debug.$o
 
 .PHONY: clean lib run
 
