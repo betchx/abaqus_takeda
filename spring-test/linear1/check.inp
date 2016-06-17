@@ -1,0 +1,27 @@
+*heading
+Simple spring model
+*node
+1, 0, 0
+2, 1, 0
+*user element, nodes=2, type=u201, properties=6, coordinates=3, variables=24
+1,2,3,4,5,6
+*element, type=U201, elset=utruss
+1, 1, 2
+*nset, nset=lp
+2
+*nset, nset=fixP
+1
+*uel property, elset=utruss
+100, 200, 300, 10, 20, 30
+*boundary
+FIXP, 1, 6
+*step
+*static
+0.1, 1.0
+*cload
+LP,  6,  6.0
+*node print, nset=LP
+U
+*node print, nset=FixP
+RF
+*end step
