@@ -27,3 +27,18 @@
 *.exe
 *.out
 *.app
+
+## Abaqus execution
+*.com
+*.dat
+*.fil
+*.msg
+*.odb
+*.prt
+*.sim
+*.sta
+*.023
+*.odb_f
+*.lck
+
+#others
