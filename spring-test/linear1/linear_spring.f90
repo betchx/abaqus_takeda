@@ -302,6 +302,7 @@ subroutine K_LINEAR_SPRING(&
   if(NNODE.ne.2) call abort('U201 must be 2 nodes')
   if(NDOFEL.ne.12) call abort('nodes of U201 must be three dimension')
   if(NDLOAD.gt.0) call abort('Distributed load on spring is not allowed')
+  if(NPROPS.lt.6) call abort('U201 requires 6 properties')
 
   ! clear
   AMATRX(:,:) = ZERO
