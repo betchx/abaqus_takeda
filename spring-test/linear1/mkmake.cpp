@@ -4,7 +4,7 @@
 
 using namespace std;
 
-int main()
+int main(int argc, char* argv[])
 {
   vector<string> lst;
 
@@ -44,8 +44,9 @@ int main()
 //  cout << "all: " <<target << " wheels.inp Param1.DAT Param2.DAT Param3.DAT ejrs.for ejrs.ctl FIR_LP_0.01_N105.txt" << endl;
 //  cout << "	abaqus user=ejrs interactive job=" << target.substr(0, target.size() - 4) << endl << endl;
   cout << "all: " <<target << " uel.for" << endl;
-  cout << "	abaqus user=uel job=" << target.substr(0, target.size() - 4) << endl << endl;
-    
+  cout << "	abq6114 user=uel ";
+  if(argc > 0) cout << "interactive ";
+  cout << "job=" << target.substr(0, target.size() - 4) << endl << endl;
 
   return 0;
 
