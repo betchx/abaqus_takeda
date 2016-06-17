@@ -49,7 +49,7 @@ EXPORTS=/EXPORT:K_LINEAR_SPRING
 
 
 o=obj
-FMODULE=debug.$o linear_spring.$o nonlinear_spring.$o
+FMODULE=debug.$o linear_spring.$o bilinear_spring.$o
 FOBJS=extdb.$o
 
 run:check.dat
