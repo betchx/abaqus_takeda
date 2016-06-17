@@ -24,6 +24,10 @@
      3  DTIME, KSTEP, KINC, JELEM, PARAMS, NDLOAD, JDLTYP, ADLMAG,
      4  PREDEF, NPREDF, LFLAGS, MLVARX, DDLMAG, MDLOAD, PNEWDT,
      5  JPROPS, NJPROP, PERIOD)
+
+      case default
+        write(*,*) 'Unknown user element id of ', JTYPE
+        call xit
       end select
 
       return
