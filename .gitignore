@@ -40,6 +40,8 @@
 *.023
 *.odb_f
 *.lck
+*.log
 
 #others
 abaqus_v6.env
+spring-test/linear1/exec.mak
