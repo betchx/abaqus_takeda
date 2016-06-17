@@ -49,7 +49,7 @@ EXPORTS=/EXPORT:K_LINEAR_SPRING
 
 
 o=obj
-FMODULE=linear_spring.$o
+FMODULE=linear_spring.$o nonlinear_spring.$o
 FOBJS=
 
 run: exec.mak abaqus_v6.env

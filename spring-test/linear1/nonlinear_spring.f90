@@ -53,47 +53,40 @@ contains
     real, intent(in)  :: DU(12,*)
 
     real, dimension(6) :: forces, dforces, dL, ddL
-    real, dimension(6) :: k1, yp, k2
-    k1 = PROPS(1:6)
-    yp = PROPS(9:14)
-    k2 = PROPS(17:22)
 
     call updateKMat(AMATRX, PROPS)
 
     dL = U(7:12) - U(1:6)
-    forces = PROPS*dL
+    forces = PROPS(1:6)*dL
     ddL = DU(7:12,1) - DU(1:6,1)
-    dforces = PROPS*ddL
+    dforces = PROPS(1:6)*ddL
     SRESID(1:6) = -dforces(:)
     SRESID(7:12) = dforces(:)
     RHS(:,1) = RHS(:,1)-SRESID
     ENERGY(2) = half*sum(forces*ddL+dforces*dL+dforces*ddL)
   end subroutine updateStaticLP
 
-  subroutine updateStatic(AMATRX,RHS,ENERGY,SRESID,PROPS,U)
+  subroutine updateStatic(AMATRX,RHS,ENERGY,SVARS,SRESID,PROPS,U)
     implicit none
     real, intent(out) :: AMATRX(12,12)
     real, intent(out) :: RHS(12,*)
     real, intent(out) :: ENERGY(8)
     real, intent(out) :: SRESID(12)
-    real, intent(in)  :: PROPS(24)
+    real, intent(inout)  :: SVARS(*)
+    real, intent(in)  :: PROPS(*)
     real, intent(in)  :: U(12)
 
-    real, dimension(6) :: forces, dL
-    real, dimension(6) :: k1, yp, k2
-    k1 = PROPS(1:6)
-    yp = PROPS(9:14)
-    k2 = PROPS(17:22)
+    real, dimension(6) :: forces, kk, ee
 
-    call updateKMat(AMATRX, PROPS)
+    ! Yield check
+    call YieldCheck(forces, kk, ee, PROPS, U)
+    call updateKMat(AMATRX, KK)
 
-    dL = U(7:12) - U(1:6)
-    forces = PROPS * dL
     SRESID(1:6) = -forces
     SRESID(7:12) = forces
     RHS(:,1) = RHS(:,1)-SRESID
     !No distributed load can be considered
-    ENERGY(2) = half * sum(forces*dL)
+    ENERGY(2) = sum(ee)
   end subroutine updateStatic
 
 
@@ -112,13 +105,9 @@ contains
     real, intent(in)  :: A(12)
     real, intent(in)  :: DTIME
 
-    real, dimension(6) :: forces, dL
+    real, dimension(6) :: forces, kk, ee
     real :: alpha, beta, gamma, dAdU, dVdU, val
     integer i, k
-    real, dimension(6) :: k1, yp, k2
-    k1 = PROPS(1:6)
-    yp = PROPS(9:14)
-    k2 = PROPS(17:22)
 
     alpha = PARAMS(1)
     beta = PARAMS(2)
@@ -127,45 +116,81 @@ contains
     dAdU = ONE/(BETA*DTIME**2)
     dVdU = gamma / (beta*DTIME)
 
+    call YieldCheck(forces, kk, ee, PROPS, U)
+
     ! No operation about mass
     do i=1,6
       k= 1 + 6
-      val = (ONE+alpha)*k1(i)
+      val = (ONE+alpha)*kk(i)
       AMATRX(i,i) = AMATRX(i,i) + val
       AMATRX(k,k) = AMATRX(k,k) + val
       AMATRX(i,k) = AMATRX(i,k) - val
       AMATRX(k,i) = AMATRX(k,i) - val
     end do
 
-    dL = U(7:12) - U(1:6)
-    forces = PROPS*dL
     SRESID(1:6) = -forces
     SRESID(7:12) = forces
     RHS(:,1) = RHS(:,1)-((ONE+alpha)*SRESID-alpha*SVARS(1:12))
     SVARS(13:24) = SVARS(1:12)
     SVARS(1:12) = SRESID
     ENERGY(1) = zero
-    ENERGY(2) = HALF*sum(forces*dL)
+    ENERGY(2) = sum(ee)
   end subroutine updateDynamic
 
-
-  subroutine updateKmat(AMATRX, PROPS)
-    implicit none
-    real :: AMATRX(12, 12)   !< 結果のマトリックス
-    real :: PROPS(24)        !< バネ剛性（6自由度)
-
-    integer :: i, k
-    real, dimension(6) :: k1, yp, k2
+  subroutine YieldCheck(F, KK, ee, PROPS, U)
+    real, intent(in)  :: PROPS(24)
+    real, intent(in)  :: U(6,2)
+    real, intent(out) :: F(6),KK(6),ee(6)
+    integer :: i
+    real :: dy  ! delta_y
+    real :: u2, p2
+    real, dimension(6) :: k1, yp, k2, dL
     k1 = PROPS(1:6)
     yp = PROPS(9:14)
     k2 = PROPS(17:22)
 
+    dL = U(:,2) - U(:,1)
+    KK = K1
+    F = K1 * dL
     do i=1, 6
-      k= i+6
-      AMATRX(i, i) =  k1(i)
-      AMATRX(k, k) =  k1(i)
-      AMATRX(i, k) = -k1(i)
-      AMATRX(k, i) = -k1(i)
+      if (abs(F(i)).gt.yp(i)) then
+        dy = yp(i)/K1(i)
+        u2 = dL(i) - dy
+        p2 = k2(i)*u2
+        F(i) = sign(yp(i)+p2, F(i))
+        KK(i) = k2(i)
+        ee(i) = half*(yp(i)*dy+p2*u2)+yp(i)*u2
+      else
+        ee(i) = half * F(i) * dL(i)
+      end if
+    end do
+  end subroutine YieldCheck
+
+  subroutine checkAndUpdateKmat(AMATRX, PROPS,U)
+    implicit none
+    real, intent(out) :: AMATRX(12, 12)
+    real, intent(in) :: PROPS(*), U(*)
+
+    real, dimension(6) :: f,k,e
+
+    call YieldCheck(f, k, e, PROPS, u)
+    call updateKMat(AMATRX, k)
+
+  end subroutine checkAndUpdateKmat
+
+  subroutine updateKmat(AMATRX, KK)
+    implicit none
+    real :: AMATRX(12, 12)   !< 結果のマトリックス
+    real :: KK(6)        !< バネ剛性（6自由度)
+
+    integer :: i, k
+
+    do i=1, 6
+    k= i+6
+    AMATRX(i, i) =  KK(i)
+    AMATRX(k, k) =  KK(i)
+    AMATRX(i, k) = -KK(i)
+    AMATRX(k, i) = -KK(i)
     end do
   end subroutine
 
@@ -187,12 +212,10 @@ contains
     real, intent(in) :: PROPS(24)
 
     real :: alpha, forces(6)
-    real, dimension(6) :: k1, yp, k2
-    k1 = PROPS(1:6)
-    yp = PROPS(9:14)
-    k2 = PROPS(17:22)
+    real, dimension(6) :: kk, ee
     alpha = PARAMS(1)
-    forces = k1*(U(7:12)-U(1:6))
+    !forces = k1*(U(7:12)-U(1:6))
+    call YieldCheck(forces, kk, ee, PROPS, U)
     SRESID(1:6) = -forces
     SRESID(7:12) = forces
     RHS(:,1) = RHS(:,1)+half*alpha*(SVARS(1:12)+SVARS(13:24))
@@ -208,20 +231,15 @@ contains
     real, intent(in) :: PROPS(24)
     real, intent(in) :: U(12)
 
-    real forces(6), du(6)
-    real, dimension(6) :: k1, yp, k2
-    k1 = PROPS(1:6)
-    yp = PROPS(9:14)
-    k2 = PROPS(17:22)
+    real, dimension(6) :: forces, kk, ee
     call updateMMat(AMATRX, PROPS)
-    du = (U(7:12)-U(1:6))
-    forces = k1* du
+    call YieldCheck(forces, kk, ee, PROPS, U)
     SRESID(1:6) = -forces
     SRESID(7:12) = forces
     RHS(:,1) = RHS(:,1)-SRESID(:)
     SVARS(1:12) = SRESID(1:12)
     ENERGY(1) = 0.0  ! because of no mass.
-    ENERGY(2) = sum(HALF*forces*du)
+    ENERGY(2) = sum(ee)
   end subroutine calcInitAcc
 
   subroutine outputForStaticLP(RHS, ENERGY, SVARS, SRESID, PROPS, U, DU)
@@ -234,17 +252,15 @@ contains
     real, intent(in) :: U(12)
     real, intent(in) :: DU(12)
 
-    real, dimension(6) :: forces, dforces, dL, ddL
-    real, dimension(6) :: k1, yp, k2
-    k1 = PROPS(1:6)
-    yp = PROPS(9:14)
-    k2 = PROPS(17:22)
+    real, dimension(6) :: forces, dforces, dL, ddL, ff, kk, ee
+
+    call YieldCheck(ff, kk, ee, PROPS, U)
 
     dL = U(7:12)-U(1:6)
     ddL = DU(7:12)-DU(1:6)
 
-    forces = k1*dL
-    dforces = k1*ddL
+    forces = kk*dL
+    dforces = kk*ddL
     SRESID(1:6) = -dforces
     SRESID(7:12) = dforces
     RHS(:,1) = RHS(:,1)-SRESID(:)
@@ -263,17 +279,14 @@ contains
     integer, intent(in)  :: NRHS
 
     integer i
-    real, dimension(6) :: dforces
-    real, dimension(6) :: k1, yp, k2
-    k1 = PROPS(1:6)
-    yp = PROPS(9:14)
-    k2 = PROPS(17:22)
+    real, dimension(6) :: dforces, kk, ee
+
 
     do i = 1, NRHS
-      dforces = k1*(DU(7:12,i)-DU(1:6,i))
-      SRESID(1:6) = -dforces
-      SRESID(7:12) = dforces
-      RHS(:,i) = RHS(:,i) - SRESID(:)
+    call YieldCheck(dforces, kk, ee, PROPS, DU(:,i))
+    SRESID(1:6) = -dforces
+    SRESID(7:12) = dforces
+    RHS(:,i) = RHS(:,i) - SRESID(:)
     end do
     SVARS(:) = zero
     SVARS(1:12) = RHS(1:12,1)
@@ -366,7 +379,7 @@ subroutine K_BILINEAR_SPRING(&
       if(LFLAGS(4).eq.1) then
         call updateStaticLP(AMATRX,RHS,ENERGY,SRESID,PROPS,U,DU)
       else
-        call updateStatic(AMATRX,RHS,ENERGY,SRESID,PROPS,U)
+        call updateStatic(AMATRX,RHS,ENERGY,SVARS,SRESID,PROPS,U)
       endif
     case (11:12)
       !Implicit Dynamic
@@ -376,7 +389,7 @@ subroutine K_BILINEAR_SPRING(&
       call abort('This Analysis type is not supported yet.')
     end select
   case(2)
-    call updateKMat(AMATRX,PROPS)
+    call checkAndUpdateKMat(AMATRX,PROPS,U)
   case(3)
     ! no dumping
   case(4)
